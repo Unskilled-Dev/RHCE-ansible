@@ -5,15 +5,60 @@
   gather_facts: false
 
   vars:
+    # Git으로 관리할 RHCE 실습 디렉토리
     repo_dir: /home/ansible/ansible
+
+    # GitHub 저장소
     repo_url: git@github.com:Unskilled-Dev/RHCE-ansible.git
 
+    # Git 사용자 정보
+    git_user_name: "Unskilled-Dev"
+
+    # ★ 본인 GitHub 이메일로 수정
+    git_user_email: "wjdxogns0721@naver.com"
+
+    # 커밋 메시지
+    commit_message: "Update RHCE Ansible labs"
+
   tasks:
+
+    #################################################################
+    # 1. Git 저장소 초기화
+    #################################################################
+
+    - name: Git 저장소 여부 확인
+      ansible.builtin.command:
+        cmd: git rev-parse --is-inside-work-tree
+        chdir: "{{ repo_dir }}"
+      register: git_repo_check
+      changed_when: false
+      failed_when: false
+
     - name: Git 저장소 초기화
       ansible.builtin.command:
         cmd: git init
         chdir: "{{ repo_dir }}"
+      when: git_repo_check.rc != 0
+
+    #################################################################
+    # 2. Git 사용자 정보 설정
+    #################################################################
+
+    - name: Git 사용자 이름 설정
+      ansible.builtin.command:
+        cmd: git config user.name "{{ git_user_name }}"
+        chdir: "{{ repo_dir }}"
       changed_when: false
+
+    - name: Git 사용자 이메일 설정
+      ansible.builtin.command:
+        cmd: git config user.email "{{ git_user_email }}"
+        chdir: "{{ repo_dir }}"
+      changed_when: false
+
+    #################################################################
+    # 3. main 브랜치 설정
+    #################################################################
 
     - name: main 브랜치 설정
       ansible.builtin.command:
@@ -21,24 +66,45 @@
         chdir: "{{ repo_dir }}"
       changed_when: false
 
+    #################################################################
+    # 4. GitHub origin 설정
+    #################################################################
+
     - name: origin 존재 여부 확인
       ansible.builtin.command:
-        cmd: git remote
+        cmd: git remote get-url origin
         chdir: "{{ repo_dir }}"
-      register: git_remote
+      register: git_origin
       changed_when: false
+      failed_when: false
 
     - name: GitHub origin 등록
       ansible.builtin.command:
         cmd: git remote add origin {{ repo_url }}
         chdir: "{{ repo_dir }}"
-      when: "'origin' not in git_remote.stdout_lines"
+      when: git_origin.rc != 0
+
+    - name: GitHub origin 주소 수정
+      ansible.builtin.command:
+        cmd: git remote set-url origin {{ repo_url }}
+        chdir: "{{ repo_dir }}"
+      when:
+        - git_origin.rc == 0
+        - git_origin.stdout != repo_url
+
+    #################################################################
+    # 5. 변경 파일 stage
+    #################################################################
 
     - name: 변경 파일 추가
       ansible.builtin.command:
         cmd: git add .
         chdir: "{{ repo_dir }}"
       changed_when: false
+
+    #################################################################
+    # 6. 변경 사항 확인
+    #################################################################
 
     - name: 변경 사항 확인
       ansible.builtin.command:
@@ -47,14 +113,43 @@
       register: git_status
       changed_when: false
 
+    - name: 변경 사항 출력
+      ansible.builtin.debug:
+        msg: "{{ git_status.stdout_lines }}"
+      when: git_status.stdout | length > 0
+
+    #################################################################
+    # 7. 변경 사항이 있을 때만 commit
+    #################################################################
+
     - name: 변경 사항 commit
       ansible.builtin.command:
-        cmd: git commit -m "Update RHCE Ansible labs"
+        cmd: git commit -m "{{ commit_message }}"
         chdir: "{{ repo_dir }}"
       when: git_status.stdout | length > 0
+
+    #################################################################
+    # 8. GitHub push
+    #
+    # 중요:
+    # commit이 없어도 항상 push를 시도한다.
+    #
+    # 이유:
+    # 이전에 commit은 성공했지만 push만 실패한 경우
+    # 다음 실행에서 기존 commit을 다시 push할 수 있기 때문
+    #################################################################
 
     - name: GitHub push
       ansible.builtin.command:
         cmd: git push -u origin main
         chdir: "{{ repo_dir }}"
-      when: git_status.stdout | length > 0
+      register: git_push
+      changed_when: "'Everything up-to-date' not in git_push.stdout"
+
+    #################################################################
+    # 9. Push 결과 출력
+    #################################################################
+
+    - name: GitHub push 결과
+      ansible.builtin.debug:
+        var: git_push.stdout_lines
