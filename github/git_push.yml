@@ -1,0 +1,60 @@
+---
+- name: RHCE Ansible 실습 GitHub 업로드
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    repo_dir: /home/ansible/ansible
+    repo_url: git@github.com:Unskilled-Dev/RHCE-ansible.git
+
+  tasks:
+    - name: Git 저장소 초기화
+      ansible.builtin.command:
+        cmd: git init
+        chdir: "{{ repo_dir }}"
+      changed_when: false
+
+    - name: main 브랜치 설정
+      ansible.builtin.command:
+        cmd: git branch -M main
+        chdir: "{{ repo_dir }}"
+      changed_when: false
+
+    - name: origin 존재 여부 확인
+      ansible.builtin.command:
+        cmd: git remote
+        chdir: "{{ repo_dir }}"
+      register: git_remote
+      changed_when: false
+
+    - name: GitHub origin 등록
+      ansible.builtin.command:
+        cmd: git remote add origin {{ repo_url }}
+        chdir: "{{ repo_dir }}"
+      when: "'origin' not in git_remote.stdout_lines"
+
+    - name: 변경 파일 추가
+      ansible.builtin.command:
+        cmd: git add .
+        chdir: "{{ repo_dir }}"
+      changed_when: false
+
+    - name: 변경 사항 확인
+      ansible.builtin.command:
+        cmd: git status --porcelain
+        chdir: "{{ repo_dir }}"
+      register: git_status
+      changed_when: false
+
+    - name: 변경 사항 commit
+      ansible.builtin.command:
+        cmd: git commit -m "Update RHCE Ansible labs"
+        chdir: "{{ repo_dir }}"
+      when: git_status.stdout | length > 0
+
+    - name: GitHub push
+      ansible.builtin.command:
+        cmd: git push -u origin main
+        chdir: "{{ repo_dir }}"
+      when: git_status.stdout | length > 0

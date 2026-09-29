@@ -1,0 +1,22 @@
+---
+- name: 0) DB 서비스 제거
+  hosts: all
+  gather_facts: false
+  tasks:
+    ##########################
+    # 1) 패키지 설치 - mariadb-server, python3-PyMySQL
+    # 2) 서비스 기동 - maraidb
+    ###########################
+    - name: 1) 패키지 설치 - mariadb-server, python3-PyMySQL
+      ansible.builtin.dnf:
+        name:
+          - mariadb
+          - mariadb-server
+          - python3-PyMySQL
+        state: present
+
+    - name: 2) 서비스 기동 - maraidb
+      ansible.builtin.systemd:
+        name: mariadb
+        state: stopped
+        enabled: false

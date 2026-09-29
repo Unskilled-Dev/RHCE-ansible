@@ -1,0 +1,108 @@
+---
+########################################
+#
+# Play 01: .htaccess 파일 사용하는 웹서버 구축
+#
+- name: Play 01 - .htaccess 파일 사용하는 웹서버 구축
+  hosts: ansible1.example.com
+  tasks:
+  # * (ㄱ) 패키지 설치
+    - name: (ㄱ) 패키지 설치
+      ansible.builtin.dnf:
+        name:
+         - httpd
+         - mod_ssl
+         - firewalld
+        state: present
+  # * (ㄴ) 서비스 설정 - /etc/httpd/conf/httpd.conf(AllowOveride AuthConfig)
+    - name: 서비스 설정 - /etc/httpd/conf/httpd.conf
+      ansible.builtin.copy:
+        src: files/httpd.conf
+        dest: /etc/httpd/conf/httpd.conf
+        owner: root
+        group: root
+        mode: '0644'
+  # * (ㄴ) 서비스 설정 - /var/www/html/.htaccess
+    - name: 서비스 설정 - /var/www/html/.htaccess
+      ansible.builtin.copy:
+        src: files/.htaccess
+        dest: /var/www/html/.htaccess
+        owner: apache
+        group: apache
+        mode: '0400'
+  # * (ㄴ) 서비스 설정 - /etc/httpd/secrets/htpasswd
+    - name: 서비스 설정 - /etc/httpd/secrets/htpasswd
+      ansible.builtin.file:
+        path: /etc/httpd/secrets/
+        state: directory
+        owner: apache
+        group: apache
+        mode: '700'
+  # * (ㄴ) 서비스 설정 - /etc/httpd/secrets/htpasswd 배포
+    - name: 서비스 설정 - /etc/httpd/secrets/htpasswd 배포
+      ansible.builtin.copy:
+        src: files/htpasswd
+        dest: /etc/httpd/secrets/htpasswd
+        owner: apache
+        group: apache
+        mode: '0600'
+  # * (ㄴ) 서비스 설정 - /var/www/html/index.html
+    - name: 서비스 설정 - /var/www/html/index.html
+      ansible.builtin.copy:
+        content: |
+          <pre>
+          Hostname - {{ ansible_facts['fqdn'] }}
+          IP - {{ ansible_facts['default_ipv4']['address'] }}
+          </pre>
+        dest: /var/www/html/index.html
+        owner: root
+        group: root
+        mode: '0644'
+
+  # * (ㄷ) 서비스 기동
+    - name: (ㄷ) 서비스 기동
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - firewalld
+        - httpd
+
+  # * (ㄹ) 방화벽 등록
+    - name: (ㄹ) 방화벽 등록
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        state: enabled
+        permanent: true
+        immediate: true
+      loop:
+        - http
+        - https
+
+#
+# Play 02: 웹 요청
+#
+- name: Play 02 - 웹 요청 with 인증
+  hosts: localhost
+  become: false
+  gather_facts: false
+
+  vars_files:
+    - vars/secret.yml
+
+  tasks:
+    - name: 1) 웹 요청 with 사용자 인증
+      ansible.builtin.uri:
+        url: http://ansible1.example.com
+        validate_certs: false
+        return_content: true
+        user: "{{ ansible1 }}"
+        password: "{{ ansible }}"
+        force_basic_auth: true
+        status_code: 200
+      register: web_output
+
+    - name: 2) 웹 출력 확인
+      ansible.builtin.debug:
+        var: web_output.content

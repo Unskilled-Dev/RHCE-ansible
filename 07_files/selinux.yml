@@ -1,0 +1,8 @@
+---
+- name: SELinux Mode permissive -> enforcing
+  hosts: all
+  tasks:
+    - name: Enable SELinux
+      ansible.posix.selinux:
+       policy: targeted
+       state: enforcing

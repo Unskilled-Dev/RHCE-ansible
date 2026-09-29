@@ -1,0 +1,48 @@
+---
+# WEB-PHP-DB 복구 작업
+- name: 1. Play 01 - WEB-PHP-DB 복구
+  hosts: webservers
+  tasks:
+#      1) 방화벽 제거
+
+   - name: 1) 방화벽, 서비스(포트) 제거 - httpd, firewalld, mysql
+     ansible.builtin.firewalld:
+       service: "{{ item }}"
+       permanent: true
+       immediate: true
+       state: disabled
+     loop:
+      - httpd
+      - firewalld
+      - mysql
+
+#      2) 서비스 중지
+   - name: 서비스 중지 - httpd, mariadb
+     ansible.builtin.service:
+       name: "{{ item }}"
+       state: stopped
+       enabled: false
+     loop:
+       - httpd
+       - mariadb
+
+#      3) 서비스 설정 삭제
+   - name: 서비스 설정 삭제 - /var/www/html/index.php
+     ansible.builtin.file:
+       path: /var/www/html/index.php
+       state: absent
+
+#      4) 패키지 삭제
+   - name:  1) 패키지 설치 - httpd, mod_ssl, php, php-mysqlnd, php-pdo, firewalld
+     ansible.builtin.dnf:
+       name:
+        - httpd
+        - mod_ssl
+        - php
+        - php-mysqlnd
+        - php-pdo
+        - firewalld
+        - mariadb
+        - mariadb-server
+        - python3-PyMySQL
+       state: absent

@@ -1,0 +1,89 @@
+---
+- name: SELinux WEB 실습 환경 원복
+  hosts: webservers
+  become: true
+
+  tasks:
+
+    # ==================================================
+    # 1. SELinux 설정 원복
+    # ==================================================
+    # playbook2.yml에서 추가했던 SELinux 설정을 제거한다.
+    #
+    # - httpd_can_network_connect : on -> off
+    # - /www(/.*)? fcontext 규칙 제거
+    # - 8888/tcp http_port_t 규칙 제거
+    # ==================================================
+    - name: SELinux 설정 원복
+      ansible.builtin.include_role:
+        name: rhel-system-roles.selinux
+      vars:
+        selinux_booleans:
+          - name: httpd_can_network_connect
+            state: false
+            persistent: true
+
+        selinux_fcontexts:
+          - target: '/www(/.*)?'
+            setype: httpd_sys_content_t
+            state: absent
+
+        selinux_ports:
+          - ports: 8888
+            proto: tcp
+            setype: http_port_t
+            state: absent
+
+        # fcontext 규칙 제거 후 /www에 기본 SELinux Context 재적용
+        selinux_restore_dirs:
+          - /www
+
+    # ==================================================
+    # 2. 방화벽 8888/tcp 규칙 제거
+    # ==================================================
+    # playbook2.yml에서 허용했던 8888/tcp 포트를 제거한다.
+    #
+    # firewalld 자체는 다른 서비스에서도 사용할 수 있으므로
+    # 종료하거나 삭제하지 않고 이번 실습 규칙만 제거한다.
+    # ==================================================
+    - name: 방화벽 설정 제거 - 8888/tcp
+      ansible.posix.firewalld:
+        port: 8888/tcp
+        permanent: true
+        immediate: true
+        state: disabled
+
+    # ==================================================
+    # 3. WEB 서비스 중지 및 자동 시작 해제
+    # ==================================================
+    - name: httpd 서비스 중지 및 자동 시작 해제
+      ansible.builtin.systemd:
+        name: httpd
+        state: stopped
+        enabled: false
+
+    # ==================================================
+    # 4. WEB 디렉토리 및 파일 제거
+    # ==================================================
+    # /www 디렉토리를 삭제하면
+    # /www/index.html도 함께 삭제된다.
+    # ==================================================
+    - name: WEB 디렉토리 제거 - /www
+      ansible.builtin.file:
+        path: /www
+        state: absent
+
+    # ==================================================
+    # 5. WEB 패키지 제거
+    # ==================================================
+    # 이번 실습에서 사용한 httpd와 mod_ssl을 제거한다.
+    #
+    # firewalld는 시스템 공용 서비스일 수 있으므로
+    # 기본 복구 작업에서는 제거하지 않는다.
+    # ==================================================
+    - name: WEB 패키지 제거
+      ansible.builtin.dnf:
+        name:
+          - httpd
+          - mod_ssl
+        state: absent
